@@ -19,7 +19,7 @@
 
 - [1.0.1 Skill ZIP](dist/codex-usage-battery-windows-1.0.1.zip)
 - [SHA-256 校验文件](dist/codex-usage-battery-windows-1.0.1.zip.sha256)
-- [Skill 源码目录](skills/codex-usage-battery-windows)
+- [Skill 源码目录](https://github.com/zhizhongjan-cell/codex-skills-public/tree/main/skills/codex-usage-battery-windows)
 - [安装说明](skills/codex-usage-battery-windows/references/installation.md)
 - [1.0.1 发布验证说明](dist/codex-usage-battery-windows-1.0.1-发布验证说明.md)
 
