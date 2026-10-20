@@ -65,6 +65,19 @@ namespace CodexBattery
             };
         }
 
+        public long? FiveHourReset {
+            get {return PrimaryMinutes==300 ? PrimaryReset : SecondaryMinutes==300 ? SecondaryReset : null;}
+        }
+        public string FiveHourResetLabel {
+            get {
+                long? reset=FiveHourReset;
+                if(reset.HasValue) {
+                    try {return "5小时重置 "+new DateTime(1970,1,1,0,0,0,DateTimeKind.Utc).AddSeconds(reset.Value).ToLocalTime().ToString("HH:mm");}
+                    catch(ArgumentOutOfRangeException) {}
+                }
+                return "5小时重置 未知";
+            }
+        }
         public int? WeeklyRemaining {
             get {return PrimaryMinutes==10080 ? PrimaryRemaining : SecondaryMinutes==10080 ? SecondaryRemaining : null;}
         }

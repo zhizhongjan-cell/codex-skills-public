@@ -27,3 +27,14 @@ Assert-Equal $rejected $true 'error responses are rejected'
 Assert-Equal ([CodexBattery.UsageSnapshot]::IsStale([DateTime]::UtcNow.AddMinutes(-3))) $true 'stale data indicated after two minutes'
 Assert-Equal ([CodexBattery.UsageSnapshot]::IsStale([DateTime]::UtcNow)) $false 'fresh data indicated'
 Write-Output 'ALL 12 TESTS PASSED'
+
+Assert-Equal $quota.FiveHourReset 1792337124 'five hour reset uses official timestamp'
+Assert-Equal $quota.FiveHourResetLabel ('5小时重置 '+([DateTimeOffset]::FromUnixTimeSeconds(1792337124).LocalDateTime.ToString('HH:mm'))) 'clock label uses local reset time with minute precision'
+Assert-Equal $empty.FiveHourResetLabel '5小时重置 未知' 'missing reset is unknown'
+$weeklyOnly=[CodexBattery.UsageSnapshot]::Parse('{"rateLimits":{"primary":{"windowDurationMins":10080,"resetsAt":1792881805}}}')
+Assert-Equal $weeklyOnly.FiveHourReset $null 'weekly reset cannot substitute for five hour reset'
+$swapped=[CodexBattery.UsageSnapshot]::Parse('{"rateLimits":{"secondary":{"windowDurationMins":300,"resetsAt":1792337124}}}')
+Assert-Equal $swapped.FiveHourReset 1792337124 'five hour reset follows duration rather than window order'
+$invalid=[CodexBattery.UsageSnapshot]::Parse('{"rateLimits":{"primary":{"windowDurationMins":300,"resetsAt":9223372036854770000}}}')
+Assert-Equal $invalid.FiveHourResetLabel '5小时重置 未知' 'out of range reset cannot render a false time'
+Write-Output 'ALL 6 RESET DISPLAY TESTS PASSED'

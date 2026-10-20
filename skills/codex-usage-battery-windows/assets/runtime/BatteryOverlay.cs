@@ -243,11 +243,13 @@ namespace CodexBattery
             connectionState=current;snapshot=current.Snapshot;fetching=current.Busy;failed=current.Error!=null;error=current.Error ?? "";
             if(changed)Invalidate();
         }
+        private string ResetClockText()
+        { return snapshot==null ? "5小时重置 未知" : snapshot.FiveHourResetLabel; }
         private string NextUpdateText()
         {
             if(fetching)return "正在更新…";
             if(connectionState==null || !connectionState.NextUpdateUtc.HasValue)return "等待连接";
-            return (failed ? "重试 " : "下次 ")+connectionState.NextUpdateUtc.Value.ToLocalTime().ToString("HH:mm:ss");
+            return (failed ? "重试 " : "下次补查 ")+connectionState.NextUpdateUtc.Value.ToLocalTime().ToString("HH:mm:ss");
         }
         private void WriteStatus()
         {
@@ -261,6 +263,7 @@ namespace CodexBattery
                 fetchedUtc=snapshot==null ? null : (string)snapshot.FetchedUtc.ToString("o"),
                 failed=failed, stale=snapshot!=null && snapshot.PrimaryIsStale, fetching=fetching,
                 weeklyRemaining=snapshot==null ? null : snapshot.WeeklyRemaining,
+                fiveHourReset=snapshot==null ? null : snapshot.FiveHourReset,clockText=ResetClockText(),
                 nextUpdateUtc=connectionState==null || !connectionState.NextUpdateUtc.HasValue ? null : (string)connectionState.NextUpdateUtc.Value.ToString("o"),
                 queryProcessId=connectionState==null ? null : connectionState.ProcessId,
                 queryProcessStarts=connectionState==null ? 0 : connectionState.ProcessStarts,
@@ -277,7 +280,7 @@ namespace CodexBattery
             bool stale=failed || (snapshot!=null && snapshot.PrimaryIsStale);
             int? value=snapshot==null ? null : snapshot.PrimaryRemaining;
             string label=stale ? "?" : value.HasValue ? value.Value+"%" : fetching ? "…" : "--";
-            DrawPanel(e.Graphics,new Rectangle(0,0,Width,Height),value,label,snapshot==null ? null : snapshot.WeeklyRemaining,NextUpdateText(),stale,failed || (snapshot!=null && snapshot.WeeklyIsStale));
+            DrawPanel(e.Graphics,new Rectangle(0,0,Width,Height),value,label,snapshot==null ? null : snapshot.WeeklyRemaining,ResetClockText(),stale,failed || (snapshot!=null && snapshot.WeeklyIsStale));
         }
         internal static void DrawPanel(Graphics g,Rectangle area,int? remaining,string label,int? weekly,string next,bool stale,bool? weeklyStale=null)
         {
@@ -376,10 +379,10 @@ namespace CodexBattery
         {
             using(var bmp=new Bitmap(1000,220))using(var g=Graphics.FromImage(bmp)) {
                 g.Clear(Color.FromArgb(18,21,26));
-                DrawPreview(g,new Rectangle(20,20,460,65),64,"64%",89,"下次 16:30:15",false);
-                DrawPreview(g,new Rectangle(515,20,460,65),8,"8%",12,"下次 16:30:15",false);
-                DrawPreview(g,new Rectangle(20,120,460,65),null,"--",null,"正在更新…",false);
-                DrawPreview(g,new Rectangle(515,120,460,65),null,"?",null,"重试 16:31:00",true);
+                DrawPreview(g,new Rectangle(20,20,460,65),64,"64%",89,"5小时重置 12:30",false);
+                DrawPreview(g,new Rectangle(515,20,460,65),8,"8%",12,"5小时重置 12:30",false);
+                DrawPreview(g,new Rectangle(20,120,460,65),null,"--",null,"5小时重置 未知",false);
+                DrawPreview(g,new Rectangle(515,120,460,65),null,"?",null,"5小时重置 未知",true);
                 bmp.Save(path,System.Drawing.Imaging.ImageFormat.Png);
             }
         }
