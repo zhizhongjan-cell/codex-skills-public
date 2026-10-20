@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex 剩余用量电池"
+  short_description: "在 Windows Codex 顶部显示剩余额度电池，支持同启同退、检查部署与故障排查"
+  default_prompt: "使用 $codex-usage-battery-windows 检查本机条件，按我的授权部署或修复 Codex 剩余用量电池，并验证显示与退出行为。"
+policy:
+  allow_implicit_invocation: true
