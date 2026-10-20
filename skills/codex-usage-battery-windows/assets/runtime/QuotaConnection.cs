@@ -30,7 +30,7 @@ namespace CodexBattery
         private Process child;
         private Task worker;
         private bool stopping,refresh=true;
-        internal QuotaConnection(string exe,string args="app-server",int pollMilliseconds=15000,
+        internal QuotaConnection(string exe,string args="app-server",int pollMilliseconds=30000,
             int timeoutMilliseconds=20000,int retryBaseMilliseconds=5000,int retryMaxMilliseconds=60000)
         {executable=exe;arguments=args;interval=pollMilliseconds;timeout=timeoutMilliseconds;retryBase=retryBaseMilliseconds;retryMax=retryMaxMilliseconds;}
 
@@ -94,7 +94,7 @@ namespace CodexBattery
                     string pending="1";
                     DateTime deadline=DateTime.UtcNow.AddMilliseconds(timeout),nextRead=DateTime.UtcNow,retryNotBefore=DateTime.MinValue;
                     lock(gate)state.NextUpdateUtc=deadline;
-                    process.StandardInput.WriteLine("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex_usage_battery\",\"version\":\"1.1.0\"}}}");
+                    process.StandardInput.WriteLine("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex_usage_battery\",\"version\":\"1.1.1\"}}}");
                     Task<string> line=NextLine(process);
                     var serializer=new JavaScriptSerializer();
                     while(!IsStopping) {

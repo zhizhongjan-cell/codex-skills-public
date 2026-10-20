@@ -18,5 +18,5 @@ if ($CodexPath) { [IO.File]::WriteAllText((Join-Path $dir 'codex-executable.txt'
 & (Join-Path $dir 'build.ps1') | Out-Host
 $names += 'CodexUsageBattery.exe'
 $hashes = @($names | ForEach-Object { [pscustomobject]@{name=$_;sha256=(Get-FileHash -LiteralPath (Join-Path $dir $_) -Algorithm SHA256).Hash} })
-[pscustomobject]@{skill='codex-usage-battery-windows';version='1.1.0';files=$hashes} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $dir 'runtime-manifest.json') -Encoding UTF8
+[pscustomobject]@{skill='codex-usage-battery-windows';version='1.1.1';files=$hashes} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $dir 'runtime-manifest.json') -Encoding UTF8
 [pscustomobject]@{runtime=$dir;compiled=$true;taskRegistered=$false;productionStarted=$false} | ConvertTo-Json

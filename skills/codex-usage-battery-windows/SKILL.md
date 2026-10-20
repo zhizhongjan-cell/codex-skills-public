@@ -6,7 +6,7 @@ description: "Use when a user wants to build, deploy, inspect, repair, or packag
 
 # Windows Codex 用量电池
 
-将真实剩余额度画在电池内部，贴附前台 Codex 窗口顶部。主值取服务返回的主要额度窗口，通常为 5 小时；悬停显示次要窗口和重置时间。时钟旁显示下一次主动补查时间及本周剩余；持续连接接收官方通知，每15秒在同一连接补查。
+将真实剩余额度画在电池内部，贴附前台 Codex 窗口顶部。主值取服务返回的主要额度窗口，通常为 5 小时；悬停显示次要窗口和重置时间。时钟旁显示下一次主动补查时间及本周剩余；持续连接接收官方通知，每30秒在同一连接补查。
 
 **它是独立 Windows 悬浮层，不能称为原生顶栏插件。** 优点是不改 Codex 安装包；代价是桌面进程、窗口和应用事件行为变化后可能需要适配。先说明这个权衡。用户已接受悬浮层、并明确要求同启同退时，在原授权范围继续，不重复询问。
 
@@ -38,7 +38,7 @@ description: "Use when a user wants to build, deploy, inspect, repair, or packag
 
 安装/调用见 [安装说明](references/installation.md)。先安装 Skill，再由用户请求检查或部署。可调用：`$codex-usage-battery-windows 检查这台电脑，按已确认的同启同退方式部署用量电池。`
 
-本包 1.1.0 为公开分享候选版。来源和验证边界见 [验证记录](references/validation.md)：本机回归与隔离构建可复现；跨机器兼容、下一次真实 Windows 开机另验，不能把模拟冷启动等同实际开机。
+本包 1.1.1 为公开分享候选版。来源和验证边界见 [验证记录](references/validation.md)：本机回归与隔离构建可复现；跨机器兼容、下一次真实 Windows 开机另验，不能把模拟冷启动等同实际开机。
 
 许可见 [LICENSE](LICENSE)：允许免费使用、修改、分享及在商业工作中作为工具使用；未经另行书面许可，不得收费提供本 Skill 本身。分发 Skill 或构建的运行目录时保留许可。
 

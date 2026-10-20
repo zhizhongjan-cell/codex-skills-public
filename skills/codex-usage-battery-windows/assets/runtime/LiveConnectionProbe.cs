@@ -13,15 +13,16 @@ internal static class LiveConnectionProbe
         int? pid=null;
         try {
             var connection=QuotaClient.Connect();
-            DateTime started=DateTime.UtcNow,end=started.AddSeconds(95);
+            DateTime started=DateTime.UtcNow,end=started.AddSeconds(135);
             while(DateTime.UtcNow<end) {
                 var current=connection.ReadState();
                 if(current.Reads>=3 && !current.Busy)break;
                 Thread.Sleep(100);
             }
             var s=connection.ReadState();pid=s.ProcessId;
-            bool ok=s.Reads>=3 && s.ProcessStarts==1 && s.Snapshot!=null;
-            result=new {ok=ok,elapsedSeconds=Math.Round((DateTime.UtcNow-started).TotalSeconds,1),reads=s.Reads,processStarts=s.ProcessStarts,queryPid=s.ProcessId,
+            double scheduleSeconds=s.Snapshot==null ? -1 : (s.NextUpdateUtc.Value-s.Snapshot.FetchedUtc).TotalSeconds;
+            bool ok=s.Reads>=3 && s.ProcessStarts==1 && s.Snapshot!=null && !s.Busy && scheduleSeconds>=29.5 && scheduleSeconds<=31;
+            result=new {ok=ok,scheduleSeconds=scheduleSeconds,elapsedSeconds=Math.Round((DateTime.UtcNow-started).TotalSeconds,1),reads=s.Reads,processStarts=s.ProcessStarts,queryPid=s.ProcessId,
                 notifications=s.Notifications,source=s.Source,nextUpdateUtc=s.NextUpdateUtc,
                 primaryRemaining=s.Snapshot==null ? null : s.Snapshot.PrimaryRemaining,
                 weeklyRemaining=s.Snapshot==null ? null : s.Snapshot.WeeklyRemaining,error=s.Error};

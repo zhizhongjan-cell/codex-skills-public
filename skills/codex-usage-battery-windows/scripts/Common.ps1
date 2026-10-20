@@ -13,7 +13,7 @@ function Assert-BatteryRuntime([string]$Directory) {
     $manifestFile = Join-Path $dir 'runtime-manifest.json'
     if (-not (Test-Path -LiteralPath $manifestFile -PathType Leaf)) { throw 'Prepared runtime manifest missing' }
     $manifest = Get-Content -LiteralPath $manifestFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($manifest.skill -ne 'codex-usage-battery-windows' -or $manifest.version -ne '1.1.0') { throw 'Unknown runtime manifest' }
+    if ($manifest.skill -ne 'codex-usage-battery-windows' -or $manifest.version -ne '1.1.1') { throw 'Unknown runtime manifest' }
     $entries = @($manifest.files)
     if (@($entries | Where-Object { $_.name -eq 'CodexUsageBattery.exe' }).Count -ne 1) { throw 'Executable hash missing' }
     foreach ($entry in $entries) {

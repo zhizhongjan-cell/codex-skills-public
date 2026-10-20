@@ -217,7 +217,7 @@ namespace CodexBattery
             else {
                 text+=UsageSnapshot.WindowName(snapshot.PrimaryMinutes,"主要额度")+"："+Percent(snapshot.PrimaryRemaining)+"，重置 "+UsageSnapshot.ResetText(snapshot.PrimaryReset)+"\n";
                 text+=UsageSnapshot.WindowName(snapshot.SecondaryMinutes,"次要额度")+"："+Percent(snapshot.SecondaryRemaining)+"，重置 "+UsageSnapshot.ResetText(snapshot.SecondaryReset)+"\n";
-                text+="最近收到数据 "+snapshot.FetchedUtc.ToLocalTime().ToString("HH:mm:ss")+"；持续连接，通知优先，15 秒补查";
+                text+="最近收到数据 "+snapshot.FetchedUtc.ToLocalTime().ToString("HH:mm:ss")+"；持续连接，通知优先，30 秒补查";
             }
             if(failed) text+="\n连接失败："+error+"；将在下次自动重试";
             else if(snapshot!=null && snapshot.PrimaryIsStale) text+="\n数据已过期";
