@@ -94,91 +94,12 @@ namespace CodexBattery
         }
     }
 
-    internal static class QuotaClient
-    {
-        private static readonly object queryLock=new object();
-        private static Process activeQuery;
-        private static bool stopping;
-        private static void StopQuery(Process process)
-        { try { if(!process.HasExited) { process.Kill(); process.WaitForExit(1000); } } catch { } }
-        internal static void Shutdown()
-        { lock(queryLock) { stopping=true; if(activeQuery!=null) StopQuery(activeQuery); } }
-        internal static string FindCodex()
-        {
-            // An optional explicit desktop CLI path is prepared locally; no credentials are stored.
-            string pathFile=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"codex-executable.txt");
-            if(File.Exists(pathFile)) {
-                string configured=File.ReadAllText(pathFile).Trim();
-                if(Path.IsPathRooted(configured) && File.Exists(configured) &&
-                    String.Equals(Path.GetFileName(configured),"codex.exe",StringComparison.OrdinalIgnoreCase))
-                    return configured;
-                throw new InvalidOperationException("Configured desktop Codex executable is unavailable");
-            }
-            // Prefer the executable actually used by the desktop app; no auth file is read.
-            foreach (Process p in Process.GetProcessesByName("codex")) {
-                using (p) { try { string path = p.MainModule.FileName;
-                    if (path.IndexOf("OpenAI\\Codex\\bin", StringComparison.OrdinalIgnoreCase) >= 0 && File.Exists(path)) return path;
-                } catch { } }
-            }
-            string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenAI", "Codex", "bin");
-            if (Directory.Exists(root)) {
-                string result = Directory.GetFiles(root, "codex.exe", SearchOption.AllDirectories).OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
-                if (result != null) return result;
-            }
-            throw new InvalidOperationException("找不到桌面版 Codex 配套程序");
-        }
-        private static string ReadLine(Process p, DateTime deadline)
-        {
-            Task<string> line = p.StandardOutput.ReadLineAsync();
-            int wait = (int)Math.Max(1, (deadline - DateTime.UtcNow).TotalMilliseconds);
-            if (!line.Wait(wait)) throw new TimeoutException("查询用量超时");
-            if (line.Result == null) throw new InvalidOperationException("用量服务已断开");
-            return line.Result;
-        }
-        internal static UsageSnapshot Fetch()
-        {
-            var serializer = new JavaScriptSerializer();
-            var info = new ProcessStartInfo(FindCodex(), "app-server") {
-                UseShellExecute=false, CreateNoWindow=true, RedirectStandardInput=true,
-                RedirectStandardOutput=true, RedirectStandardError=true,
-                WorkingDirectory=AppDomain.CurrentDomain.BaseDirectory
-            };
-            Process started;
-            lock(queryLock) {
-                if(stopping) throw new OperationCanceledException();
-                started=Process.Start(info); activeQuery=started;
-            }
-            using (Process p = started) {
-                try {
-                    // Drain stderr without retaining potentially sensitive server output.
-                    p.ErrorDataReceived += delegate { };
-                    p.BeginErrorReadLine();
-                    DateTime deadline = DateTime.UtcNow.AddSeconds(20);
-                    p.StandardInput.WriteLine("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex_usage_battery\",\"version\":\"1.0.0\"}}}");
-                    IDictionary<string, object> reply;
-                    do { reply = UsageSnapshot.Map(serializer.DeserializeObject(ReadLine(p, deadline))); }
-                    while (Convert.ToString(UsageSnapshot.Get(reply, "id")) != "1");
-                    if (UsageSnapshot.Get(reply,"error") != null) throw new InvalidOperationException("用量服务初始化失败");
-                    p.StandardInput.WriteLine("{\"method\":\"initialized\",\"params\":{}}");
-                    p.StandardInput.WriteLine("{\"method\":\"account/rateLimits/read\",\"id\":2}");
-                    do { reply = UsageSnapshot.Map(serializer.DeserializeObject(ReadLine(p, deadline))); }
-                    while (Convert.ToString(UsageSnapshot.Get(reply, "id")) != "2");
-                    if (UsageSnapshot.Get(reply, "error") != null) throw new InvalidOperationException("读取失败，请确认 Codex 已使用 ChatGPT 登录");
-                    object result = UsageSnapshot.Get(reply,"result");
-                    if (result == null) throw new InvalidOperationException("未收到用量数据");
-                    return UsageSnapshot.Parse(serializer.Serialize(result));
-                } finally {
-                    lock(queryLock) { if(activeQuery==p) activeQuery=null; }
-                    StopQuery(p);
-                }
-            }
-        }
-    }
-
     internal sealed class BatteryForm : Form
     {
         private readonly System.Windows.Forms.Timer tracking = new System.Windows.Forms.Timer();
-        private readonly System.Windows.Forms.Timer polling = new System.Windows.Forms.Timer();
+        private QuotaConnection connection;
+        private QuotaState connectionState;
+        private bool wasShowing;
         private readonly ToolTip tip = new ToolTip { AutoPopDelay=30000, InitialDelay=250, ReshowDelay=100 };
         private readonly ContextMenuStrip menu = new ContextMenuStrip();
         private readonly EventWaitHandle stop;
@@ -209,7 +130,7 @@ namespace CodexBattery
             stop=stopSignal;
             Text="Codex 用量电池"; FormBorderStyle=FormBorderStyle.None; ShowInTaskbar=false;
             StartPosition=FormStartPosition.Manual; DoubleBuffered=true; AutoScaleMode=AutoScaleMode.None;
-            BackColor=Color.Magenta; TransparencyKey=Color.Magenta; Size=new Size(74,28);
+            BackColor=Color.Magenta; TransparencyKey=Color.Magenta; Size=new Size(240,34);
             menu.Items.Add("立即刷新",null,delegate { RefreshUsage(); });
             menu.Items.Add("恢复默认位置",null,delegate { inset=190; topOffset=10; SavePosition(); Track(); });
             menu.Items.Add(new ToolStripSeparator());
@@ -223,7 +144,7 @@ namespace CodexBattery
             MouseUp += delegate { if(dragging) { dragging=false; Capture=false; SavePosition(); } };
             if(loadPosition) LoadPosition();
             tracking.Interval=250; tracking.Tick += delegate { if(stop != null && stop.WaitOne(0)) { Close(); return; } Track(); };
-            polling.Interval=60000; polling.Tick += delegate { RefreshUsage(); };
+
         }
         internal void StartTracking(bool fetch)
         {
@@ -259,14 +180,15 @@ namespace CodexBattery
                 loggedPhase=lifetime.Phase;
                 RuntimeLog.Write("phase",new {phase=loggedPhase,hasHostProcess=hostProcessAlive,target=target.ToInt64()});
             }
-            if(hasHost && wantUsage && !pollingStarted) { pollingStarted=true; polling.Start(); RefreshUsage(); }
+            if(hasHost && wantUsage && !pollingStarted) { pollingStarted=true; RefreshUsage(); }
+            SyncConnection();
             bool foreground=TestMode || front==target || front==Handle || menu.Visible || dragging;
             Native.Rect rect;
             bool canShow=target!=IntPtr.Zero && Native.IsWindow(target) && Native.IsWindowVisible(target) &&
                 !Native.IsIconic(target) && foreground && Native.GetWindowRect(target,out rect);
             if(canShow) {
                 Native.GetWindowRect(target,out rect); scale=Native.Scale(target);
-                int width=(int)Math.Round(74*scale), height=(int)Math.Round(28*scale);
+                int width=(int)Math.Round(240*scale), height=(int)Math.Round(34*scale);
                 int x=rect.Right-(int)Math.Round(inset*scale)-width, y=rect.Top+(int)Math.Round(topOffset*scale);
                 x=Math.Max(rect.Left+8,x);
                 Native.SetOwner(Handle,target);
@@ -282,6 +204,8 @@ namespace CodexBattery
                 if(Visible) Hide();
                 if(raisedLayer) {Native.SetOverlayLayer(Handle,false);raisedLayer=false;}
             }
+            if(canShow && !wasShowing && connection!=null && (snapshot==null || (DateTime.UtcNow-snapshot.FetchedUtc).TotalSeconds>3))connection.RequestRefresh();
+            wasShowing=canShow;
             UpdateTip();
             WriteStatus();
         }
@@ -293,28 +217,37 @@ namespace CodexBattery
             else {
                 text+=UsageSnapshot.WindowName(snapshot.PrimaryMinutes,"主要额度")+"："+Percent(snapshot.PrimaryRemaining)+"，重置 "+UsageSnapshot.ResetText(snapshot.PrimaryReset)+"\n";
                 text+=UsageSnapshot.WindowName(snapshot.SecondaryMinutes,"次要额度")+"："+Percent(snapshot.SecondaryRemaining)+"，重置 "+UsageSnapshot.ResetText(snapshot.SecondaryReset)+"\n";
-                text+="更新 "+snapshot.FetchedUtc.ToLocalTime().ToString("HH:mm:ss")+"；每 60 秒刷新";
+                text+="最近收到数据 "+snapshot.FetchedUtc.ToLocalTime().ToString("HH:mm:ss")+"；持续连接，通知优先，15 秒补查";
             }
             if(failed) text+="\n连接失败："+error+"；将在下次自动重试";
-            else if(snapshot!=null && UsageSnapshot.IsStale(snapshot.FetchedUtc)) text+="\n数据已过期";
+            else if(snapshot!=null && snapshot.PrimaryIsStale) text+="\n数据已过期";
+            if(snapshot!=null && snapshot.WeeklyFetchedUtc.HasValue)
+                text+="\n周额度采样 "+snapshot.WeeklyFetchedUtc.Value.ToLocalTime().ToString("HH:mm:ss")+(snapshot.WeeklyIsStale ? "（已过期，等待校对）" : "");
+            text+="\n"+NextUpdateText()+"；官方通知可能更早更新";
             text+="\n拖动调整位置；右键刷新或退出";
             if(tip.GetToolTip(this)!=text) { tip.SetToolTip(this,text); Invalidate(); }
         }
         internal void RefreshUsage()
         {
-            if(fetching || TestMode) return;
-            fetching=true; UpdateTip();
-            Task.Run(delegate {
-                UsageSnapshot result=null; string failure=null;
-                try { result=QuotaClient.Fetch(); } catch(Exception e) {
-                    failure=e is TimeoutException ? "查询超时" : "请检查网络和 Codex 登录";
-                }
-                try { if(!IsDisposed && IsHandleCreated) BeginInvoke((Action)delegate {
-                    fetching=false; failed=failure!=null; error=failure ?? "";
-                    if(result!=null) snapshot=result;
-                    UpdateTip(); Invalidate(); WriteStatus();
-                }); } catch(InvalidOperationException) { }
-            });
+            if(TestMode)return;
+            try {if(connection==null)connection=QuotaClient.Connect();connection.RequestRefresh();SyncConnection();}
+            catch {failed=true;error="无法建立查询连接，请检查桌面配套程序";}
+            UpdateTip();Invalidate();
+        }
+        private void SyncConnection()
+        {
+            if(connection==null)return;
+            QuotaState current=connection.ReadState();
+            bool changed=connectionState==null || snapshot!=current.Snapshot || connectionState.Busy!=current.Busy ||
+                connectionState.NextUpdateUtc!=current.NextUpdateUtc || connectionState.Error!=current.Error;
+            connectionState=current;snapshot=current.Snapshot;fetching=current.Busy;failed=current.Error!=null;error=current.Error ?? "";
+            if(changed)Invalidate();
+        }
+        private string NextUpdateText()
+        {
+            if(fetching)return "正在更新…";
+            if(connectionState==null || !connectionState.NextUpdateUtc.HasValue)return "等待连接";
+            return (failed ? "重试 " : "下次 ")+connectionState.NextUpdateUtc.Value.ToLocalTime().ToString("HH:mm:ss");
         }
         private void WriteStatus()
         {
@@ -326,7 +259,14 @@ namespace CodexBattery
                 primaryRemaining=snapshot==null ? null : snapshot.PrimaryRemaining,
                 secondaryRemaining=snapshot==null ? null : snapshot.SecondaryRemaining,
                 fetchedUtc=snapshot==null ? null : (string)snapshot.FetchedUtc.ToString("o"),
-                failed=failed, stale=snapshot!=null && UsageSnapshot.IsStale(snapshot.FetchedUtc), fetching=fetching };
+                failed=failed, stale=snapshot!=null && snapshot.PrimaryIsStale, fetching=fetching,
+                weeklyRemaining=snapshot==null ? null : snapshot.WeeklyRemaining,
+                nextUpdateUtc=connectionState==null || !connectionState.NextUpdateUtc.HasValue ? null : (string)connectionState.NextUpdateUtc.Value.ToString("o"),
+                queryProcessId=connectionState==null ? null : connectionState.ProcessId,
+                queryProcessStarts=connectionState==null ? 0 : connectionState.ProcessStarts,
+                queryReads=connectionState==null ? 0 : connectionState.Reads,
+                notifications=connectionState==null ? 0 : connectionState.Notifications,
+                connectionSource=connectionState==null ? null : connectionState.Source,connectionMode="persistent",weeklyStale=snapshot!=null && snapshot.WeeklyIsStale };
             string json=new JavaScriptSerializer().Serialize(data);
             if(json==lastStatus) return;
             try { File.WriteAllText(Path.Combine(folder,"status.json"),json); lastStatus=json; } catch { }
@@ -334,10 +274,30 @@ namespace CodexBattery
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            bool stale=failed || (snapshot!=null && UsageSnapshot.IsStale(snapshot.FetchedUtc));
+            bool stale=failed || (snapshot!=null && snapshot.PrimaryIsStale);
             int? value=snapshot==null ? null : snapshot.PrimaryRemaining;
             string label=stale ? "?" : value.HasValue ? value.Value+"%" : fetching ? "…" : "--";
-            DrawBattery(e.Graphics,new Rectangle(0,0,Width,Height),value,label,stale);
+            DrawPanel(e.Graphics,new Rectangle(0,0,Width,Height),value,label,snapshot==null ? null : snapshot.WeeklyRemaining,NextUpdateText(),stale,failed || (snapshot!=null && snapshot.WeeklyIsStale));
+        }
+        internal static void DrawPanel(Graphics g,Rectangle area,int? remaining,string label,int? weekly,string next,bool stale,bool? weeklyStale=null)
+        {
+            GraphicsState state=g.Save();g.TranslateTransform(area.Left,area.Top);g.ScaleTransform(area.Width/240f,area.Height/34f);
+            DrawBattery(g,new Rectangle(0,3,74,28),remaining,label,stale);
+            g.SmoothingMode=SmoothingMode.AntiAlias;
+            using(var background=RoundRect(new RectangleF(79,1,160,32),6))
+            using(var brush=new SolidBrush(Color.FromArgb(24,29,35)))g.FillPath(brush,background);
+            Color accent=stale ? Color.FromArgb(155,166,180) : Color.FromArgb(103,205,231);
+            using(var pen=new Pen(accent,1.4f)) {
+                g.DrawEllipse(pen,85,9,15,15);g.DrawLine(pen,92.5f,12,92.5f,17);g.DrawLine(pen,92.5f,17,96,19);
+            }
+            using(var font=new Font("Microsoft YaHei UI",9,FontStyle.Regular,GraphicsUnit.Pixel))
+            using(var text=new SolidBrush(Color.FromArgb(239,243,248))) {
+                g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                g.DrawString(next,font,text,new RectangleF(106,2,130,15));
+                string week=(weeklyStale ?? stale) ? "?" : weekly.HasValue ? weekly.Value+"%" : "未知";
+                g.DrawString("本周剩余 "+week,font,text,new RectangleF(106,17,130,15));
+            }
+            g.Restore(state);
         }
         internal static void DrawBattery(Graphics g, Rectangle area, int? remaining, string label, bool stale)
         {
@@ -368,12 +328,12 @@ namespace CodexBattery
         { float d=radius*2; var p=new GraphicsPath(); p.AddArc(r.X,r.Y,d,d,180,90);p.AddArc(r.Right-d,r.Y,d,d,270,90);p.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);p.AddArc(r.X,r.Bottom-d,d,d,90,90);p.CloseFigure();return p; }
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            tracking.Stop(); polling.Stop();
+            tracking.Stop();
             if(!TestMode) QuotaClient.Shutdown();
             if(!TestMode) RuntimeLog.Write("exit",new {reason=exitReason});
             try { if(!TestMode) File.WriteAllText(Path.Combine(folder,"status.json"),new JavaScriptSerializer().Serialize(new {
                 visible=false,running=false,exitedUtc=DateTime.UtcNow.ToString("o"),reason=exitReason })); } catch { }
-            tracking.Dispose(); polling.Dispose(); tip.Dispose(); menu.Dispose(); base.OnFormClosed(e);
+            tracking.Dispose(); tip.Dispose(); menu.Dispose(); base.OnFormClosed(e);
         }
     }
 
@@ -409,22 +369,22 @@ namespace CodexBattery
             try { var s=QuotaClient.Fetch(); result=new { ok=true,primaryRemaining=s.PrimaryRemaining,secondaryRemaining=s.SecondaryRemaining,
                 primaryMinutes=s.PrimaryMinutes,secondaryMinutes=s.SecondaryMinutes,fetchedUtc=s.FetchedUtc.ToString("o") }; }
             catch(Exception e) { result=new { ok=false, errorType=e.GetType().Name }; Environment.ExitCode=1; }
+            QuotaClient.Shutdown();
             File.WriteAllText(path,new JavaScriptSerializer().Serialize(result));
         }
         private static void Preview(string path)
         {
-            using(var bmp=new Bitmap(590,160)) using(var g=Graphics.FromImage(bmp)) {
+            using(var bmp=new Bitmap(1000,220))using(var g=Graphics.FromImage(bmp)) {
                 g.Clear(Color.FromArgb(18,21,26));
-                int?[] values={64,100,20,8,null};
-                string[] labels={"64%","100%","20%","8%","?"};
-                for(int i=0;i<5;i++) BatteryForm.DrawBattery(g,new Rectangle(14+i*115,30,100,38),values[i],labels[i],i==4);
-                using(var font=new Font("Microsoft YaHei UI",10)) using(var b=new SolidBrush(Color.LightGray)) {
-                    g.DrawString("Codex 剩余额度 · 每 60 秒刷新",font,b,18,100);
-                    g.DrawString("正常            充足             偏低             即将耗尽        连接异常",font,b,18,78);
-                }
+                DrawPreview(g,new Rectangle(20,20,460,65),64,"64%",89,"下次 16:30:15",false);
+                DrawPreview(g,new Rectangle(515,20,460,65),8,"8%",12,"下次 16:30:15",false);
+                DrawPreview(g,new Rectangle(20,120,460,65),null,"--",null,"正在更新…",false);
+                DrawPreview(g,new Rectangle(515,120,460,65),null,"?",null,"重试 16:31:00",true);
                 bmp.Save(path,System.Drawing.Imaging.ImageFormat.Png);
             }
         }
+        private static void DrawPreview(Graphics g,Rectangle area,int? main,string label,int? week,string next,bool stale)
+        {BatteryForm.DrawPanel(g,area,main,label,week,next,stale);}
         private static void UiTest(string path)
         {
             var checks=new List<string>(); string failure=null;

@@ -25,3 +25,5 @@ $codex-usage-battery-windows 在新目录构建并验证剩余用量电池。我
 仅成包或安装 Skill，不会自动更改当前正在运行的电池。不要移动已部署 runtime；停用请按 workflow 使用 Disable 脚本，保留文件。删除需另按用户批准规则。
 
 公开分享版：可从 https://github.com/zhizhongjan-cell/codex-skills-public 获取。使用和转发前阅读 Skill 根目录 LICENSE；可以在商业工作中免费作为工具使用，但不能收费提供这个 Skill 本身。
+
+1.1.0 在电池旁显示时钟、下一次主动补查时间及真实周额度；同一查询连接每15秒校对，通知可能更早更新。更新时在新目录构建验证，保留旧包与位置；不要直接覆盖正在运行的exe。

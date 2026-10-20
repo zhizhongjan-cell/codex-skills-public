@@ -1,6 +1,6 @@
 # Codex Skills 公开分享版
 
-这里提供可下载、安装和检查的 Codex Skill。当前版本为 **codex-usage-battery-windows 1.0.1**。
+这里提供可下载、安装和检查的 Codex Skill。当前版本为 **codex-usage-battery-windows 1.1.0**。
 
 ## 先看许可
 
@@ -17,11 +17,11 @@
 
 ## 下载与安装
 
-- [1.0.1 Skill ZIP](dist/codex-usage-battery-windows-1.0.1.zip)
-- [SHA-256 校验文件](dist/codex-usage-battery-windows-1.0.1.zip.sha256)
+- [1.1.0 Skill ZIP](dist/codex-usage-battery-windows-1.1.0.zip)
+- [SHA-256 校验文件](dist/codex-usage-battery-windows-1.1.0.zip.sha256)
 - [Skill 源码目录](https://github.com/zhizhongjan-cell/codex-skills-public/tree/main/skills/codex-usage-battery-windows)
 - [安装说明](skills/codex-usage-battery-windows/references/installation.md)
-- [1.0.1 发布验证说明](dist/codex-usage-battery-windows-1.0.1-发布验证说明.md)
+- [1.1.0 发布验证说明](dist/codex-usage-battery-windows-1.1.0-发布验证说明.md)
 
 把下载的 ZIP 附给自己的 Codex，输入：
 
@@ -33,7 +33,7 @@
 
 ## 电池做什么
 
-在前台 Codex 窗口顶部显示独立电池悬浮层，内部显示真实剩余额度，主值通常是服务返回的5小时窗口；悬停显示其他额度窗口与重置时间。每60秒刷新，缺失或过期数据会标明。
+在前台 Codex 窗口顶部显示独立电池悬浮层，内部显示真实剩余额度，主值通常是服务返回的5小时窗口；悬停显示其他额度窗口与重置时间。电池旁的时钟显示下一次主动补查时间和本周剩余。优先接收官方额度通知，每15秒在同一持续连接补查，正常刷新不重复启动进程；缺失、失败或过期数据会标明。
 
 通过 Windows 应用启动事件触发；打开 Codex 后附着，最后窗口关闭后退出。它不是原生 Codex 顶部栏插件，不修改 Codex 安装包。
 
@@ -41,9 +41,12 @@
 
 ## 版本与验证边界
 
-- 1.0.1 新增正式许可、分享说明和运行目录许可保留，电池功能C#源码与1.0.0一致。
-- 1.0.0已通过46项功能回归，包括真实32秒窗口延迟测试；这些是原版本记录，不当作本次重新执行。
-- 本次1.0.1的构建、清单完整性、单元与部署边界检查见发布验证说明。
-- 尚未完成下一次真实 Windows 重启登录或另一台电脑的实际验收。安装 Skill、部署电池和真实开机验收是独立步骤。
+- 1.1.0 新增时钟/下次主动补查时间/周额度面板；持续连接优先消费通知，每15秒补查，普通查询错误退避但不重启进程。
+- 完整测试包括80项功能检查、14项部署边界检查，以及真实接口连续读取时只启动一个查询进程的验证。实际执行结果见发布说明。
+- 官方接口提供数据，但本工具没有直接接管官方桌面的私有连接，不能保证与官方画面零延迟一致。
+- 尚未完成下一次真实Windows重启登录或另一台电脑的实际验收。安装、部署和真实开机验收是独立步骤。
+- [保留的1.0.1包](dist/codex-usage-battery-windows-1.0.1.zip)继续保留，未删除或覆盖旧版本。
 
-本分享仓库不包含作者机器的凭据、账户额度快照、运行日志、任务 XML、位置文件或编译 exe。
+![1.1.0显示预览：示例数值](docs/preview-1.1.0.png)
+
+本分享仓库不包含作者机器的凭据、账户额度快照、运行日志、任务XML、位置文件或编译exe。查询使用用户自己的桌面登录，不需要新增API Key。

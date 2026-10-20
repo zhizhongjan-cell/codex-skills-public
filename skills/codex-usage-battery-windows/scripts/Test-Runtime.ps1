@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$RuntimeDirectory, [ValidateSet('State','Unit','Full','Usage')][string]$Suite='State')
+﻿param([Parameter(Mandatory=$true)][string]$RuntimeDirectory, [ValidateSet('State','Unit','Full','Usage','Connection','Live')][string]$Suite='State')
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $dir = Assert-BatteryRuntime $RuntimeDirectory
 $exe = Join-Path $dir 'CodexUsageBattery.exe'
@@ -22,6 +22,14 @@ function Invoke-BatteryTest([string]$File,[string]$Report,[string]$Argument='') 
     $result | ConvertTo-Json -Depth 6
 }
 if ($Suite -eq 'Usage') { Invoke-BatteryTest $exe 'probe.json' '--probe'; return }
+if ($Suite -eq 'Connection') { & (Join-Path $PSScriptRoot 'Test-Connection.ps1') -RuntimeDirectory $dir; return }
+if ($Suite -eq 'Live') {
+    $compiler=Get-BatteryCompiler
+    & $compiler /nologo /target:exe /main:LiveConnectionProbe "/out:$(Join-Path $dir 'LiveConnectionProbe.exe')" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll (Join-Path $dir 'UsageCore.cs') (Join-Path $dir 'HostLifetime.cs') (Join-Path $dir 'QuotaConnection.cs') (Join-Path $dir 'BatteryOverlay.cs') (Join-Path $dir 'LiveConnectionProbe.cs')
+    if($LASTEXITCODE -ne 0){throw 'Live connection probe compilation failed'}
+    Invoke-BatteryTest (Join-Path $dir 'LiveConnectionProbe.exe') 'live-connection-probe.json'
+    return
+}
 $ps = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
 foreach ($test in @('tests.ps1','host-lifetime-tests.ps1','process-lifetime-tests.ps1')) {
     & $ps -NoProfile -File (Join-Path $dir $test)
@@ -30,9 +38,11 @@ foreach ($test in @('tests.ps1','host-lifetime-tests.ps1','process-lifetime-test
 if ($Suite -eq 'Unit') { return }
 $compiler = Get-BatteryCompiler
 foreach ($test in @('LifecycleTest','ColdStartTest')) {
-    & $compiler /nologo /target:winexe /optimize+ /utf8output "/main:CodexBattery.$test" "/out:$(Join-Path $dir ($test+'.exe'))" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll (Join-Path $dir 'UsageCore.cs') (Join-Path $dir 'HostLifetime.cs') (Join-Path $dir 'BatteryOverlay.cs') (Join-Path $dir ($test+'.cs'))
+    & $compiler /nologo /target:winexe /optimize+ /utf8output "/main:CodexBattery.$test" "/out:$(Join-Path $dir ($test+'.exe'))" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll (Join-Path $dir 'UsageCore.cs') (Join-Path $dir 'HostLifetime.cs') (Join-Path $dir 'QuotaConnection.cs') (Join-Path $dir 'BatteryOverlay.cs') (Join-Path $dir ($test+'.cs'))
     if ($LASTEXITCODE -ne 0) { throw "Test build failed: $test" }
 }
 Invoke-BatteryTest $exe 'ui-test.json' '--ui-test'
 Invoke-BatteryTest (Join-Path $dir 'LifecycleTest.exe') 'lifecycle-test.json'
 Invoke-BatteryTest (Join-Path $dir 'ColdStartTest.exe') 'cold-start-test.json'
+
+& (Join-Path $PSScriptRoot 'Test-Connection.ps1') -RuntimeDirectory $dir

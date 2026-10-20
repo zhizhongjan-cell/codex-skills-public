@@ -6,7 +6,7 @@
 
 ```powershell
 $skill = 'D:\Tools\Skills\codex-usage-battery-windows' # 替换为实际路径
-$runtime = Join-Path $env:LOCALAPPDATA 'CodexUsageBattery\runtime-v1'
+$runtime = Join-Path $env:LOCALAPPDATA 'CodexUsageBattery\runtime-v1-1-0'
 & "$skill\scripts\Inspect-Environment.ps1"
 & "$skill\scripts\Prepare-Runtime.ps1" -Destination $runtime -WhatIf
 ```
@@ -66,3 +66,7 @@ $desktopCli = 'D:\REPLACE-WITH-ACTUAL-PATH\codex.exe'
 ```
 
 没有自动卸载/删除脚本。需要删除时先遵循用户批准规则；停用不等于移除 Skill，也不立即关闭运行中的电池。
+
+## 1.1.0 持续连接验证
+
+Full套件现在包含33项协议/取消/退避检查和进程复用回归，使用隔离的假服务，不读取真实登录。`Test-Runtime -Suite Live`另在真实官方接口上连续运行等待至少3次读取（最长95秒），要求至少3次读取而只启动1个子进程，结束时清理子进程。只有用户授权实际连接检查时执行Live。该检查不等于官方桌面画面零延迟同步。

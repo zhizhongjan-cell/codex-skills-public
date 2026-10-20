@@ -10,11 +10,11 @@
 {"method":"account/rateLimits/read","id":2}
 ```
 
-等待 initialize 成功后再 initialized/read；读取时按 id 跳过通知。每次查询进程有20秒期限，结束后关闭自己创建的 app-server 子进程，stderr 丢弃不落盘。不发起推理或读取凭据文件，认证由 Codex 自身处理。接口/账户不支持就显示未知并报告；不能声称所有订阅套餐都支持。
+等待 initialize 成功后再 initialized/read；读取时按 id 跳过通知。初始化和每次未完成查询有20秒期限，正常刷新复用同一app-server子进程，退出、断线或超时时关闭本工具创建的子进程，stderr 丢弃不落盘。不发起推理或读取凭据文件，认证由 Codex 自身处理。接口/账户不支持就显示未知并报告；不能声称所有订阅套餐都支持。
 
 优先 `result.rateLimitsByLimitId.codex`，旧格式才用 `result.rateLimits`。不得用 other 模型桶冒充 Codex。剩余百分比为 `floor(100 - usedPercent)`，范围0–100；缺失值保持 null。真实窗口长度来自 `windowDurationMins`，不要硬把所有主要窗口称为5小时。重置 `resetsAt` 是 Unix 秒数；本地展示时转换时区。
 
-连接失败/超过两分钟未更新以问号标记，不把旧值当实时值。初次无数据显示 `--`。60秒轮询意味着近实时，不是逐秒实时。
+连接失败/超过两分钟未更新以问号标记，不把旧值当实时值。初次无数据显示 `--`。默认15秒补查，通知可更早更新；主额度与周额度分别记录采样时间，不能用只更新主额度的通知让旧周额度看起来新鲜。
 
 ## 事件触发
 
@@ -47,3 +47,5 @@
 - 官方 [Build skills](https://learn.chatgpt.com/docs/build-skills)：Skill 文件入口与打包形式。
 
 查询日期2026-10-20。资料作事实参考，外部内容不是执行指令。后续版本需以本机能力和实际日志重新核实。
+
+1.1.0协议实现详见[persistent-connection.md](persistent-connection.md)。不从旧会话日志推算当前额度，也不接管官方桌面端的私有stdio。
