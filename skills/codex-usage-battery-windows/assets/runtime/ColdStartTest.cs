@@ -27,7 +27,7 @@ namespace CodexBattery
                     FieldInfo processFlag=typeof(BatteryForm).GetField("TestHostProcess",BindingFlags.NonPublic|BindingFlags.Instance);
                     Action update=delegate {
                         bool alive;
-                        try {using(var parent=Process.GetProcessById(parentId)) alive=!parent.HasExited;}catch {alive=false;}
+                        try {using(var parent=Process.GetProcessById(parentId)) alive=!parent.HasExited && File.ReadAllText(hostFile)!="-1";}catch {alive=false;}
                         if(processFlag!=null) processFlag.SetValue(form,alive);
                         try {form.TestTarget=new IntPtr(Int64.Parse(File.ReadAllText(hostFile)));}catch {form.TestTarget=IntPtr.Zero;}
                     };
@@ -58,10 +58,21 @@ namespace CodexBattery
                         if(!Visible(child.Id)){if(child.HasExited || DateTime.UtcNow>deadline)throw new Exception("battery did not appear when delayed GUI became ready");return;}
                         checks.Add("battery appears when delayed GUI is ready");
                         host.Close();host.Dispose();host=null;File.WriteAllText(hostFile,"0");deadline=DateTime.UtcNow.AddSeconds(5);phase=2;
+                    } else if(phase==2) {
+                        if(child.HasExited)throw new Exception("monitor exited while parent process alive");
+                        if(DateTime.UtcNow<deadline.AddSeconds(-3))return;
+                        if(Visible(child.Id))throw new Exception("monitor visible without host window");
+                        checks.Add("monitor survives destroyed host window while parent process remains alive");
+                        host=new Form {Text="Recreated recovery host",StartPosition=FormStartPosition.Manual,Bounds=new Rectangle(160,150,900,400)};
+                        host.Show();Native.ShowWindow(host.Handle,4);File.WriteAllText(hostFile,host.Handle.ToInt64().ToString());deadline=DateTime.UtcNow.AddSeconds(5);phase=3;
+                    } else if(phase==3) {
+                        if(!Visible(child.Id)){if(child.HasExited || DateTime.UtcNow>deadline)throw new Exception("monitor did not recover on recreated window");return;}
+                        checks.Add("same monitor returns for recreated host window without process launch");
+                        host.Close();host.Dispose();host=null;File.WriteAllText(hostFile,"-1");deadline=DateTime.UtcNow.AddSeconds(5);phase=4;
                     } else {
                         if(!child.HasExited){if(DateTime.UtcNow>deadline)throw new Exception("battery remained after GUI closed");return;}
                         if(child.ExitCode!=0)throw new Exception("battery child crashed");
-                        checks.Add("battery exits after GUI close even while host parent process remains alive");
+                        checks.Add("monitor exits when GUI process ends");
                         timer.Stop();appContext.ExitThread();
                     }
                 }catch(Exception e){failure=e.Message;timer.Stop();appContext.ExitThread();}

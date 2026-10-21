@@ -21,8 +21,8 @@ namespace CodexBattery
         public bool ShouldExit(bool hasHostWindow, bool hasHostProcess, DateTime nowUtc)
         {
             if(hasHostWindow) { seenHost=true; seenProcess=true; missingSinceUtc=null; Phase="attached"; return false; }
-            if(!seenHost && hasHostProcess) {
-                seenProcess=true; missingSinceUtc=null; Phase="waiting_for_window"; return false;
+            if(hasHostProcess) {
+                seenProcess=true; missingSinceUtc=null; Phase=seenHost ? "paused_no_window" : "waiting_for_window"; return false;
             }
             if(!seenHost && !seenProcess) {
                 Phase="waiting_for_process";
@@ -33,7 +33,7 @@ namespace CodexBattery
             Phase=seenHost ? "window_closing" : "process_exiting";
             if(!missingSinceUtc.HasValue) missingSinceUtc=nowUtc;
             bool ended=nowUtc-missingSinceUtc.Value>=TimeSpan.FromSeconds(1);
-            if(ended) ExitReason=seenHost ? "last_window_closed" : "host_process_exited_before_window";
+            if(ended) ExitReason=seenHost ? "host_process_exited" : "host_process_exited_before_window";
             return ended;
         }
     }

@@ -118,6 +118,7 @@ namespace CodexBattery
         private bool hostProcessAlive;
         private DateTime nextProcessCheck=DateTime.MinValue;
         private string loggedPhase="",exitReason="user_stopped";
+        internal Func<QuotaConnection> TestConnectionFactory;
         internal bool TestMode;
         internal IntPtr TestTarget;
         internal bool TestHostProcess=false;
@@ -180,6 +181,7 @@ namespace CodexBattery
                 loggedPhase=lifetime.Phase;
                 RuntimeLog.Write("phase",new {phase=loggedPhase,hasHostProcess=hostProcessAlive,target=target.ToInt64()});
             }
+            if(!hasHost && pollingStarted) PauseUsage();
             if(hasHost && wantUsage && !pollingStarted) { pollingStarted=true; RefreshUsage(); }
             SyncConnection();
             bool foreground=TestMode || front==target || front==Handle || menu.Visible || dragging;
@@ -191,7 +193,7 @@ namespace CodexBattery
                 int width=(int)Math.Round(240*scale), height=(int)Math.Round(34*scale);
                 int x=rect.Right-(int)Math.Round(inset*scale)-width, y=rect.Top+(int)Math.Round(topOffset*scale);
                 x=Math.Max(rect.Left+8,x);
-                Native.SetOwner(Handle,target);
+                // No native owner: host-window destruction must not destroy the monitor.
                 var bounds=new Rectangle(x,y,width,height);
                 if(Bounds!=bounds) { Bounds=bounds; Invalidate(); }
                 if(!Visible) Show();
@@ -229,10 +231,18 @@ namespace CodexBattery
         }
         internal void RefreshUsage()
         {
-            if(TestMode)return;
-            try {if(connection==null)connection=QuotaClient.Connect();connection.RequestRefresh();SyncConnection();}
+            if(TestMode && TestConnectionFactory==null)return;
+            if(!TestMode && (target==IntPtr.Zero || !Native.IsWindowVisible(target)))return;
+            try {if(connection==null)connection=TestConnectionFactory!=null ? TestConnectionFactory() : QuotaClient.Connect();connection.RequestRefresh();SyncConnection();}
             catch {failed=true;error="无法建立查询连接，请检查桌面配套程序";}
             UpdateTip();Invalidate();
+        }
+        private void PauseUsage()
+        {
+            if(connection!=null)connection.Dispose();
+            if(!TestMode)QuotaClient.Shutdown();
+            connection=null;connectionState=null;snapshot=null;pollingStarted=false;
+            fetching=false;failed=false;error="";
         }
         private void SyncConnection()
         {
@@ -332,6 +342,7 @@ namespace CodexBattery
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             tracking.Stop();
+            if(connection!=null)connection.Dispose();
             if(!TestMode) QuotaClient.Shutdown();
             if(!TestMode) RuntimeLog.Write("exit",new {reason=exitReason});
             try { if(!TestMode) File.WriteAllText(Path.Combine(folder,"status.json"),new JavaScriptSerializer().Serialize(new {

@@ -94,7 +94,7 @@ namespace CodexBattery
                     string pending="1";
                     DateTime deadline=DateTime.UtcNow.AddMilliseconds(timeout),nextRead=DateTime.UtcNow,retryNotBefore=DateTime.MinValue;
                     lock(gate)state.NextUpdateUtc=deadline;
-                    process.StandardInput.WriteLine("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex_usage_battery\",\"version\":\"1.1.2\"}}}");
+                    process.StandardInput.WriteLine("{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"codex_usage_battery\",\"version\":\"1.1.3\"}}}");
                     Task<string> line=NextLine(process);
                     var serializer=new JavaScriptSerializer();
                     while(!IsStopping) {
